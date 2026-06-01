@@ -36,8 +36,9 @@ app.use('/api/cars', require('./routes/cars'));
 app.use('/api/announcements', require('./routes/announcements'));
 app.use('/api/reservations', authMiddleware, require('./routes/reservations'));
 
-// Admin-only routes (dashboard + contracts keep their /admin prefix)
-app.use('/api/admin', authMiddleware, require('./routes/dashboard'));
+// Dashboard route
+app.use('/api/dashboard', authMiddleware, require('./routes/dashboard'));
+// Contracts route
 app.use('/api/admin', authMiddleware, require('./routes/contracts'));
 
 const PORT = process.env.PORT || 3001;
