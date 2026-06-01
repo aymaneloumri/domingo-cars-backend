@@ -1,11 +1,19 @@
 const express = require('express');
 const db = require('../db');
 
-const publicRouter = express.Router();
-const adminRouter = express.Router();
+const router = express.Router();
 
-// PUBLIC: active announcements within current date range
-publicRouter.get('/announcements', (req, res) => {
+const auth = (req, res, next) => {
+  const token = req.headers['x-admin-token'];
+  if (!token || token !== process.env.ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'Non autorisé' });
+  }
+  next();
+};
+
+// ── Public routes ─────────────────────────────────────────────────────────────
+
+router.get('/', (req, res) => {
   const today = new Date().toISOString().split('T')[0];
   const announcements = db.prepare(`
     SELECT * FROM announcements
@@ -17,14 +25,13 @@ publicRouter.get('/announcements', (req, res) => {
   res.json(announcements);
 });
 
-// ADMIN: all announcements
-adminRouter.get('/announcements', (req, res) => {
-  const announcements = db.prepare('SELECT * FROM announcements ORDER BY id DESC').all();
-  res.json(announcements);
+// ── Admin routes ──────────────────────────────────────────────────────────────
+
+router.get('/admin/all', auth, (req, res) => {
+  res.json(db.prepare('SELECT * FROM announcements ORDER BY id DESC').all());
 });
 
-// ADMIN: create announcement
-adminRouter.post('/announcements', (req, res) => {
+router.post('/admin', auth, (req, res) => {
   const { title, message, start_date, end_date, status } = req.body;
   const result = db.prepare(`
     INSERT INTO announcements (title, message, start_date, end_date, status)
@@ -35,8 +42,7 @@ adminRouter.post('/announcements', (req, res) => {
   res.status(201).json(ann);
 });
 
-// ADMIN: update announcement
-adminRouter.put('/announcements/:id', (req, res) => {
+router.put('/admin/:id', auth, (req, res) => {
   const { id } = req.params;
   const { title, message, start_date, end_date, status } = req.body;
 
@@ -45,15 +51,13 @@ adminRouter.put('/announcements/:id', (req, res) => {
     WHERE id=?
   `).run(title, message, start_date, end_date, status, id);
 
-  const ann = db.prepare('SELECT * FROM announcements WHERE id = ?').get(id);
-  res.json(ann);
+  res.json(db.prepare('SELECT * FROM announcements WHERE id = ?').get(id));
 });
 
-// ADMIN: delete announcement
-adminRouter.delete('/announcements/:id', (req, res) => {
+router.delete('/admin/:id', auth, (req, res) => {
   const { id } = req.params;
   db.prepare('DELETE FROM announcements WHERE id = ?').run(id);
   res.json({ success: true });
 });
 
-module.exports = { publicRouter, adminRouter };
+module.exports = router;

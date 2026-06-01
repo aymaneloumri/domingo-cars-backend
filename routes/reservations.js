@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../db');
 
 // GET all reservations (with car info)
-router.get('/reservations', (req, res) => {
+router.get('/', (req, res) => {
   const reservations = db.prepare(`
     SELECT r.*, c.name as car_name
     FROM reservations r
@@ -14,7 +14,7 @@ router.get('/reservations', (req, res) => {
 });
 
 // POST create reservation (with conflict check)
-router.post('/reservations', (req, res) => {
+router.post('/', (req, res) => {
   const { car_id, client_name, client_phone, start_date, end_date, status } = req.body;
 
   const conflict = db.prepare(`
@@ -45,7 +45,7 @@ router.post('/reservations', (req, res) => {
 });
 
 // PUT update reservation (with conflict check, excluding self)
-router.put('/reservations/:id', (req, res) => {
+router.put('/:id', (req, res) => {
   const { id } = req.params;
   const { car_id, client_name, client_phone, start_date, end_date, status } = req.body;
 
@@ -81,7 +81,7 @@ router.put('/reservations/:id', (req, res) => {
 });
 
 // DELETE reservation
-router.delete('/reservations/:id', (req, res) => {
+router.delete('/:id', (req, res) => {
   const { id } = req.params;
   db.prepare('DELETE FROM reservations WHERE id = ?').run(id);
   res.json({ success: true });
