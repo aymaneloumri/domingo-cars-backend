@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: domingo-cars-backend
+    env: node
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: ADMIN_PASSWORD
+        value: domingo2024
+      - key: NODE_ENV
+        value: production
