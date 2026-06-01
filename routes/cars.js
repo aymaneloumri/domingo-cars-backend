@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const { Readable } = require('stream');
 const cloudinary = require('cloudinary').v2;
-const db = require('../db');
+const pool = require('../db');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -32,8 +32,13 @@ const auth = (req, res, next) => {
 
 // ── Admin routes (must be before /:id wildcard) ───────────────────────────────
 
-router.get('/admin/all', auth, (req, res) => {
-  res.json(db.prepare('SELECT * FROM cars ORDER BY sort_order ASC, id ASC').all());
+router.get('/admin/all', auth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM cars ORDER BY sort_order ASC, id ASC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post('/admin/upload', auth, upload.single('image'), async (req, res) => {
@@ -52,53 +57,76 @@ router.post('/admin/upload', auth, upload.single('image'), async (req, res) => {
   }
 });
 
-router.post('/admin', auth, (req, res) => {
-  const { name, category, price_per_day, image_url, description, matricule, status } = req.body;
-  const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order),0)+1 AS next FROM cars').get().next;
-  const result = db.prepare(`
-    INSERT INTO cars (name, category, price_per_day, image_url, description, matricule, status, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(name, category, price_per_day, image_url || '', description || '', matricule || '', status || 'active', maxOrder);
-
-  res.status(201).json(db.prepare('SELECT * FROM cars WHERE id = ?').get(result.lastInsertRowid));
+router.post('/admin', auth, async (req, res) => {
+  try {
+    const { name, category, price_per_day, image_url, description, matricule, status } = req.body;
+    const orderRes = await pool.query('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM cars');
+    const maxOrder = orderRes.rows[0].next;
+    const result = await pool.query(
+      `INSERT INTO cars (name, category, price_per_day, image_url, description, matricule, status, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [name, category, price_per_day, image_url || '', description || '', matricule || '', status || 'active', maxOrder]
+    );
+    const car = await pool.query('SELECT * FROM cars WHERE id = $1', [result.rows[0].id]);
+    res.status(201).json(car.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.put('/admin/:id', auth, (req, res) => {
-  const { id } = req.params;
-  const { name, category, price_per_day, image_url, description, matricule, status } = req.body;
-  db.prepare(`
-    UPDATE cars SET name=?, category=?, price_per_day=?, image_url=?, description=?, matricule=?, status=?
-    WHERE id=?
-  `).run(name, category, price_per_day, image_url || '', description || '', matricule || '', status, id);
-
-  res.json(db.prepare('SELECT * FROM cars WHERE id = ?').get(id));
+router.put('/admin/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, category, price_per_day, image_url, description, matricule, status } = req.body;
+    await pool.query(
+      `UPDATE cars SET name=$1, category=$2, price_per_day=$3, image_url=$4, description=$5, matricule=$6, status=$7
+       WHERE id=$8`,
+      [name, category, price_per_day, image_url || '', description || '', matricule || '', status, id]
+    );
+    const car = await pool.query('SELECT * FROM cars WHERE id = $1', [id]);
+    res.json(car.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.delete('/admin/:id', auth, (req, res) => {
-  const { id } = req.params;
-  db.prepare('DELETE FROM cars WHERE id = ?').run(id);
-  res.json({ success: true });
+router.delete('/admin/:id', auth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM cars WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Public routes (/:id wildcard must be last) ────────────────────────────────
 
-router.get('/', (req, res) => {
-  const cars = db.prepare("SELECT * FROM cars WHERE status = 'active' ORDER BY sort_order ASC, id ASC").all();
-  res.json(cars);
+router.get('/', async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM cars WHERE status = 'active' ORDER BY sort_order ASC, id ASC"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.get('/:id/availability', (req, res) => {
-  const { id } = req.params;
-  const { start, end } = req.query;
-  if (!start || !end) return res.status(400).json({ error: 'start and end dates required' });
-
-  const conflict = db.prepare(`
-    SELECT COUNT(*) as count FROM reservations
-    WHERE car_id = ? AND status != 'cancelled'
-    AND NOT (end_date < ? OR start_date > ?)
-  `).get(id, start, end);
-
-  res.json({ available: conflict.count === 0 });
+router.get('/:id/availability', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { start, end } = req.query;
+    if (!start || !end) return res.status(400).json({ error: 'start and end dates required' });
+    const result = await pool.query(
+      `SELECT COUNT(*) as count FROM reservations
+       WHERE car_id = $1 AND status != 'cancelled'
+       AND NOT (end_date < $2 OR start_date > $3)`,
+      [id, start, end]
+    );
+    res.json({ available: parseInt(result.rows[0].count) === 0 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
