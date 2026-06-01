@@ -30,28 +30,7 @@ const auth = (req, res, next) => {
   next();
 };
 
-// ── Public routes ─────────────────────────────────────────────────────────────
-
-router.get('/', (req, res) => {
-  const cars = db.prepare("SELECT * FROM cars WHERE status = 'active' ORDER BY sort_order ASC, id ASC").all();
-  res.json(cars);
-});
-
-router.get('/:id/availability', (req, res) => {
-  const { id } = req.params;
-  const { start, end } = req.query;
-  if (!start || !end) return res.status(400).json({ error: 'start and end dates required' });
-
-  const conflict = db.prepare(`
-    SELECT COUNT(*) as count FROM reservations
-    WHERE car_id = ? AND status != 'cancelled'
-    AND NOT (end_date < ? OR start_date > ?)
-  `).get(id, start, end);
-
-  res.json({ available: conflict.count === 0 });
-});
-
-// ── Admin routes ──────────────────────────────────────────────────────────────
+// ── Admin routes (must be before /:id wildcard) ───────────────────────────────
 
 router.get('/admin/all', auth, (req, res) => {
   res.json(db.prepare('SELECT * FROM cars ORDER BY sort_order ASC, id ASC').all());
@@ -99,6 +78,27 @@ router.delete('/admin/:id', auth, (req, res) => {
   const { id } = req.params;
   db.prepare('DELETE FROM cars WHERE id = ?').run(id);
   res.json({ success: true });
+});
+
+// ── Public routes (/:id wildcard must be last) ────────────────────────────────
+
+router.get('/', (req, res) => {
+  const cars = db.prepare("SELECT * FROM cars WHERE status = 'active' ORDER BY sort_order ASC, id ASC").all();
+  res.json(cars);
+});
+
+router.get('/:id/availability', (req, res) => {
+  const { id } = req.params;
+  const { start, end } = req.query;
+  if (!start || !end) return res.status(400).json({ error: 'start and end dates required' });
+
+  const conflict = db.prepare(`
+    SELECT COUNT(*) as count FROM reservations
+    WHERE car_id = ? AND status != 'cancelled'
+    AND NOT (end_date < ? OR start_date > ?)
+  `).get(id, start, end);
+
+  res.json({ available: conflict.count === 0 });
 });
 
 module.exports = router;
