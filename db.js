@@ -89,6 +89,11 @@ db.exec(`
 // Add sort_order column if it doesn't exist
 try { db.exec('ALTER TABLE cars ADD COLUMN sort_order INTEGER DEFAULT 0'); } catch (e) {}
 
+// Add pricing columns to reservations if they don't exist
+try { db.exec('ALTER TABLE reservations ADD COLUMN prix_par_jour REAL DEFAULT 0'); } catch (e) {}
+try { db.exec('ALTER TABLE reservations ADD COLUMN nb_jours INTEGER DEFAULT 0'); } catch (e) {}
+try { db.exec('ALTER TABLE reservations ADD COLUMN prix_total REAL DEFAULT 0'); } catch (e) {}
+
 // Seed cars
 const carsCount = db.prepare('SELECT COUNT(*) as count FROM cars').get();
 if (carsCount.count === 0) {
