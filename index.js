@@ -23,16 +23,15 @@ const authMiddleware = (req, res, next) => {
 
 // DB debug route
 app.get('/test-db', async (req, res) => {
-  const pool = require('./db')
   try {
-    const result = await pool.query('SELECT NOW()')
-    res.json({ success: true, time: result.rows[0].now })
-  } catch (err) {
+    const dbUrl = process.env.DATABASE_URL
     res.json({
-      error: err.message,
-      code: err.code,
-      detail: err.detail
+      hasUrl: !!dbUrl,
+      urlPreview: dbUrl ? dbUrl.substring(0, 50) + '...' : 'NONE',
+      urlLength: dbUrl ? dbUrl.length : 0
     })
+  } catch (err) {
+    res.json({ error: err.message })
   }
 })
 
