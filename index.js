@@ -21,6 +21,21 @@ const authMiddleware = (req, res, next) => {
   next();
 };
 
+// DB debug route
+app.get('/test-db', async (req, res) => {
+  const pool = require('./db')
+  try {
+    const result = await pool.query('SELECT NOW()')
+    res.json({ success: true, time: result.rows[0].now })
+  } catch (err) {
+    res.json({
+      error: err.message,
+      code: err.code,
+      detail: err.detail
+    })
+  }
+})
+
 // Auth endpoint
 app.post('/api/auth', (req, res) => {
   const { password } = req.body;
