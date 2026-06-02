@@ -1,20 +1,27 @@
 const { Pool } = require('pg')
 
-if (!process.env.DATABASE_URL) {
-  console.error('DATABASE_URL is not set!')
-}
+const connectionString = process.env.DATABASE_URL
 
-console.log('Connecting to DB:', process.env.DATABASE_URL ? 'URL found' : 'NO URL')
+console.log('DB URL exists:', !!connectionString)
+console.log('DB URL starts with:', connectionString ? connectionString.substring(0, 30) : 'NONE')
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: connectionString,
   ssl: {
     rejectUnauthorized: false
-  }
+  },
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
 })
 
-pool.on('error', (err) => {
-  console.error('DB Pool error:', err.message)
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error('DB connection error:', err.message)
+  } else {
+    console.log('DB connected successfully!')
+    release()
+  }
 })
 
 module.exports = pool
