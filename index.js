@@ -24,14 +24,22 @@ const authMiddleware = (req, res, next) => {
 // DB debug route
 app.get('/test-db', async (req, res) => {
   try {
-    const dbUrl = process.env.DATABASE_URL
+    const pool = require('./db')
+    if (!pool) {
+      return res.json({ error: 'Pool is null - check db.js logs' })
+    }
+    const result = await pool.query('SELECT NOW() as time')
     res.json({
-      hasUrl: !!dbUrl,
-      urlPreview: dbUrl ? dbUrl.substring(0, 50) + '...' : 'NONE',
-      urlLength: dbUrl ? dbUrl.length : 0
+      success: true,
+      time: result.rows[0].time,
+      message: 'DB connected!'
     })
   } catch (err) {
-    res.json({ error: err.message })
+    res.json({
+      error: err.message,
+      code: err.code,
+      detail: err.detail || 'no detail'
+    })
   }
 })
 
