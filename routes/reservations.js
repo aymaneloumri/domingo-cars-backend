@@ -180,6 +180,24 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// PUT save invoice number to reservation
+router.put('/:id/invoice', async (req, res) => {
+  try {
+    const token = req.headers['x-admin-token'];
+    if (token !== (process.env.ADMIN_PASSWORD || 'domingo2024')) {
+      return res.status(401).json({ error: 'Non autorisé' });
+    }
+    const { invoice_number, invoice_date, avance, reste } = req.body;
+    await pool.query(
+      `UPDATE reservations SET invoice_number=$1, invoice_date=$2, avance=$3, reste=$4 WHERE id=$5`,
+      [invoice_number, invoice_date, avance || 0, reste || 0, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE reservation
 router.delete('/:id', async (req, res) => {
   try {

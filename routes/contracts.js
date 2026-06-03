@@ -4,6 +4,24 @@ const pool = require('../db');
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// GET next invoice number
+router.get('/contracts/next-invoice-number', async (req, res) => {
+  try {
+    const token = req.headers['x-admin-token'];
+    if (token !== (process.env.ADMIN_PASSWORD || 'domingo2024')) {
+      return res.status(401).json({ error: 'Non autorisé' });
+    }
+    const result = await pool.query(
+      "SELECT COUNT(*) FROM reservations WHERE invoice_number IS NOT NULL"
+    );
+    const count = parseInt(result.rows[0].count) + 1;
+    const invoice_number = `FAC-${String(count).padStart(4, '0')}`;
+    res.json({ invoice_number });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET next contract number (must be before /contracts/:id)
 router.get('/contracts/next-number', async (req, res) => {
   try {
