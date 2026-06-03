@@ -73,6 +73,10 @@ router.get('/by-client/:client_id', async (req, res) => {
     const password = process.env.ADMIN_PASSWORD || 'domingo2024';
     if (token !== password) return res.status(401).json({ error: 'Non autorisé' });
 
+    // Get client name for fallback name-based matching (old reservations have client_id = null)
+    const clientRow = await pool.query('SELECT nom_prenom FROM clients WHERE id = $1', [req.params.client_id]);
+    const clientName = clientRow.rows[0]?.nom_prenom || '';
+
     const result = await pool.query(`
       SELECT r.*, c.name as car_name, c.matricule, c.category,
              c.price_per_day, c.image_url,
@@ -81,8 +85,9 @@ router.get('/by-client/:client_id', async (req, res) => {
       LEFT JOIN cars c ON r.car_id = c.id
       LEFT JOIN clients cl ON r.client_id = cl.id
       WHERE r.client_id = $1
+         OR ($2 != '' AND LOWER(r.client_name) LIKE LOWER($3))
       ORDER BY r.created_at DESC
-    `, [req.params.client_id]);
+    `, [req.params.client_id, clientName, `%${clientName}%`]);
 
     res.json(result.rows);
   } catch (err) {
