@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 
 const app = express();
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -125,6 +126,9 @@ app.post('/api/auth', (req, res) => {
   }
 });
 
+// Alerts route
+app.use('/api/alerts', require('./routes/alerts'));
+
 // Resource routes
 app.use('/api/cars', require('./routes/cars'));
 app.use('/api/announcements', require('./routes/announcements'));
@@ -137,10 +141,111 @@ app.use('/api/dashboard', authMiddleware, require('./routes/dashboard'));
 app.use('/api/admin', authMiddleware, require('./routes/contracts'));
 app.use('/api', authMiddleware, require('./routes/contracts'));
 
+// ── Alerts deadline cron ──────────────────────────────────────────────────────
+const alertTransporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD,
+  },
+});
+
+async function checkAlerts() {
+  try {
+    const pool = require('./db');
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+
+    const result = await pool.query(
+      `SELECT * FROM alerts WHERE status = 'active' AND end_date >= $1`,
+      [todayStr]
+    );
+
+    const alertDays = [30, 15, 10, 5, 2, 1];
+
+    for (const alert of result.rows) {
+      const endDate = new Date(alert.end_date);
+      const diffTime = endDate - today;
+      const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (alertDays.includes(daysLeft)) {
+        const urgency = daysLeft <= 2 ? '🚨' : daysLeft <= 5 ? '⚠️' : '🔔';
+        const subject = `${urgency} Alerte échéance J-${daysLeft} — ${alert.title}`;
+
+        const html = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: #0a0a0a; padding: 20px; text-align: center;">
+              <h1 style="color: #FF6B00; margin: 0; font-size: 22px; letter-spacing: 2px;">DOMINGO CARS LUXURY RENT</h1>
+            </div>
+            <div style="padding: 30px; background: #f9f9f9;">
+              <h2 style="color: ${daysLeft <= 2 ? '#e24b4a' : daysLeft <= 5 ? '#FF6B00' : '#333'};">
+                ${urgency} Rappel échéance — J-${daysLeft}
+              </h2>
+              <table style="width:100%; border-collapse:collapse;">
+                <tr style="background: #FF6B00;">
+                  <td colspan="2" style="padding:10px 16px; color:#fff; font-weight:bold;">DÉTAILS DE L'ALERTE</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 16px; border:1px solid #ddd; color:#666; width:40%;">Tâche</td>
+                  <td style="padding:10px 16px; border:1px solid #ddd; font-weight:bold;">${alert.title}</td>
+                </tr>
+                <tr style="background:#f9f9f9;">
+                  <td style="padding:10px 16px; border:1px solid #ddd; color:#666;">Type</td>
+                  <td style="padding:10px 16px; border:1px solid #ddd;">${alert.type}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 16px; border:1px solid #ddd; color:#666;">Date d'échéance</td>
+                  <td style="padding:10px 16px; border:1px solid #ddd; color:#e24b4a; font-weight:bold;">
+                    ${new Date(alert.end_date).toLocaleDateString('fr-FR')}
+                  </td>
+                </tr>
+                <tr style="background:#f9f9f9;">
+                  <td style="padding:10px 16px; border:1px solid #ddd; color:#666;">Jours restants</td>
+                  <td style="padding:10px 16px; border:1px solid #ddd; color:${daysLeft <= 2 ? '#e24b4a' : '#FF6B00'}; font-size:20px; font-weight:bold;">
+                    ${daysLeft} jour(s)
+                  </td>
+                </tr>
+                ${alert.notes ? `<tr><td style="padding:10px 16px; border:1px solid #ddd; color:#666;">Notes</td><td style="padding:10px 16px; border:1px solid #ddd;">${alert.notes}</td></tr>` : ''}
+              </table>
+              <div style="margin-top:20px; text-align:center;">
+                <a href="https://www.domingocars.ma/chef/alertes"
+                   style="background:#FF6B00; color:#fff; padding:12px 24px; text-decoration:none; border-radius:4px; display:inline-block;">
+                  Gérer les alertes →
+                </a>
+              </div>
+            </div>
+            <div style="background:#0a0a0a; padding:14px; text-align:center;">
+              <p style="color:#555; font-size:11px; margin:0;">Domingo Cars Luxury Rent — Casablanca, Maroc</p>
+            </div>
+          </div>
+        `;
+
+        await alertTransporter.sendMail({
+          from: `"Domingo Cars Luxury Rent" <${process.env.GMAIL_USER}>`,
+          to: process.env.ADMIN_EMAIL || 'Domingocarsrent@gmail.com',
+          subject,
+          html,
+        });
+
+        console.log(`Alert email sent: ${alert.title} — J-${daysLeft}`);
+      }
+    }
+  } catch (err) {
+    console.error('checkAlerts error:', err.message);
+  }
+}
+
+app.get('/test-alerts', async (req, res) => {
+  await checkAlerts();
+  res.json({ success: true, message: 'Alerts check triggered' });
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
   // Run once at startup then every 24 hours
   checkEndingReservations();
   setInterval(checkEndingReservations, 24 * 60 * 60 * 1000);
+  checkAlerts();
+  setInterval(checkAlerts, 24 * 60 * 60 * 1000);
 });
