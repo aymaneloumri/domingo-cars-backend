@@ -66,10 +66,36 @@ router.get('/monthly-report', async (req, res) => {
   }
 });
 
+// GET reservations by client — must be before /:id wildcard
+router.get('/by-client/:client_id', async (req, res) => {
+  try {
+    const token = req.headers['x-admin-token'];
+    const password = process.env.ADMIN_PASSWORD || 'domingo2024';
+    if (token !== password) return res.status(401).json({ error: 'Non autorisé' });
+
+    const result = await pool.query(`
+      SELECT r.*, c.name as car_name, c.matricule, c.category,
+             c.price_per_day, c.image_url,
+             cl.nom_prenom as client_nom
+      FROM reservations r
+      LEFT JOIN cars c ON r.car_id = c.id
+      LEFT JOIN clients cl ON r.client_id = cl.id
+      WHERE r.client_id = $1
+      ORDER BY r.created_at DESC
+    `, [req.params.client_id]);
+
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST create reservation (with conflict check)
 router.post('/', async (req, res) => {
   try {
-    const { car_id, client_name, client_phone, start_date, end_date, status, prix_par_jour, nb_jours, prix_total } = req.body;
+    const { car_id, client_name, client_phone, client_id,
+            start_date, end_date, start_datetime, end_datetime,
+            status, prix_par_jour, nb_jours, prix_total } = req.body;
 
     const conflict = await pool.query(
       `SELECT COUNT(*) as count FROM reservations
@@ -83,10 +109,13 @@ router.post('/', async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO reservations (car_id, client_name, client_phone, start_date, end_date, status, prix_par_jour, nb_jours, prix_total)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-      [car_id, client_name, client_phone, start_date, end_date, status || 'pending',
-       prix_par_jour || 0, nb_jours || 0, prix_total || 0]
+      `INSERT INTO reservations (car_id, client_name, client_phone, client_id,
+         start_date, end_date, start_datetime, end_datetime,
+         status, prix_par_jour, nb_jours, prix_total)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+      [car_id, client_name, client_phone, client_id || null,
+       start_date, end_date, start_datetime || null, end_datetime || null,
+       status || 'pending', prix_par_jour || 0, nb_jours || 0, prix_total || 0]
     );
 
     const reservation = await pool.query(
@@ -105,7 +134,9 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { car_id, client_name, client_phone, start_date, end_date, status, prix_par_jour, nb_jours, prix_total } = req.body;
+    const { car_id, client_name, client_phone, client_id,
+            start_date, end_date, start_datetime, end_datetime,
+            status, prix_par_jour, nb_jours, prix_total } = req.body;
 
     if (status !== 'cancelled') {
       const conflict = await pool.query(
@@ -123,11 +154,13 @@ router.put('/:id', async (req, res) => {
 
     await pool.query(
       `UPDATE reservations
-       SET car_id=$1, client_name=$2, client_phone=$3, start_date=$4, end_date=$5, status=$6,
-           prix_par_jour=$7, nb_jours=$8, prix_total=$9
-       WHERE id=$10`,
-      [car_id, client_name, client_phone, start_date, end_date, status,
-       prix_par_jour || 0, nb_jours || 0, prix_total || 0, id]
+       SET car_id=$1, client_name=$2, client_phone=$3, client_id=$4,
+           start_date=$5, end_date=$6, start_datetime=$7, end_datetime=$8,
+           status=$9, prix_par_jour=$10, nb_jours=$11, prix_total=$12
+       WHERE id=$13`,
+      [car_id, client_name, client_phone, client_id || null,
+       start_date, end_date, start_datetime || null, end_datetime || null,
+       status, prix_par_jour || 0, nb_jours || 0, prix_total || 0, id]
     );
 
     const reservation = await pool.query(
