@@ -133,8 +133,9 @@ app.use('/api/clients', require('./routes/clients'));
 
 // Dashboard route
 app.use('/api/dashboard', authMiddleware, require('./routes/dashboard'));
-// Contracts route
+// Contracts routes — mounted at both /api/admin (legacy) and /api (used by frontend)
 app.use('/api/admin', authMiddleware, require('./routes/contracts'));
+app.use('/api', authMiddleware, require('./routes/contracts'));
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, '0.0.0.0', () => {

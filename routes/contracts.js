@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // GET next contract number (must be before /contracts/:id)
 router.get('/contracts/next-number', async (req, res) => {
@@ -153,6 +155,110 @@ router.delete('/contracts/:id', async (req, res) => {
     await pool.query('DELETE FROM contracts WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST send contract by email
+router.post('/contracts/send-email', async (req, res) => {
+  try {
+    const token = req.headers['x-admin-token'];
+    const password = process.env.ADMIN_PASSWORD || 'domingo2024';
+    if (token !== password) return res.status(401).json({ error: 'Non autorisé' });
+
+    const { emails, contract } = req.body;
+    if (!emails || !Array.isArray(emails) || emails.length === 0) {
+      return res.status(400).json({ error: 'Aucun email fourni' });
+    }
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto;">
+        <div style="background: #0a0a0a; padding: 24px; text-align: center;">
+          <h1 style="color: #FF6B00; margin: 0; font-size: 24px; letter-spacing: 3px;">DOMINGO CARS LUXURY RENT</h1>
+          <p style="color: #888; margin: 6px 0 0; font-size: 13px;">Contrat de location de voiture</p>
+        </div>
+        <div style="padding: 30px; background: #f9f9f9;">
+          <h2 style="color: #333; margin-bottom: 4px;">Bonjour ${contract.client_name || ''},</h2>
+          <p style="color: #666; margin-bottom: 24px;">
+            Veuillez trouver ci-dessous les détails de votre contrat de location
+            <strong style="color: #FF6B00;">${contract.contract_number || ''}</strong>.
+          </p>
+          <table style="width:100%; border-collapse: collapse; margin-bottom: 24px;">
+            <tr style="background: #FF6B00;">
+              <td colspan="2" style="padding: 12px 16px; color: #fff; font-weight: bold; font-size: 14px; letter-spacing: 1px;">📋 DÉTAILS DU CONTRAT</td>
+            </tr>
+            ${[
+              ['N° Contrat', contract.contract_number || '—', '#fff'],
+              ['Date du contrat', contract.contract_date || '—', '#f9f9f9'],
+              ['Véhicule', `${contract.brand || ''} ${contract.model || ''} ${contract.matricule ? '('+contract.matricule+')' : ''}`, '#fff'],
+              ['Départ', contract.depart_datetime || contract.start_date || '—', '#f9f9f9'],
+              ['Retour prévu', contract.retour_prevu || contract.end_date || '—', '#fff'],
+              ['Durée', `${contract.nb_days || '—'} jours`, '#f9f9f9'],
+              ['Prix / jour', `${contract.price_per_day || '—'} MAD`, '#fff'],
+            ].map(([label, value, bg]) => `
+              <tr style="background: ${bg};">
+                <td style="padding: 10px 16px; border: 1px solid #eee; color: #666; font-size: 13px; width: 40%;">${label}</td>
+                <td style="padding: 10px 16px; border: 1px solid #eee; color: #333; font-size: 13px;">${value}</td>
+              </tr>`).join('')}
+            <tr style="background: #f9f9f9;">
+              <td style="padding: 10px 16px; border: 1px solid #eee; color: #666; font-size: 13px;">Total</td>
+              <td style="padding: 10px 16px; border: 1px solid #eee; color: #FF6B00; font-weight: bold; font-size: 16px;">${contract.total || '—'} MAD</td>
+            </tr>
+            <tr style="background: #fff;">
+              <td style="padding: 10px 16px; border: 1px solid #eee; color: #666; font-size: 13px;">Avance versée</td>
+              <td style="padding: 10px 16px; border: 1px solid #eee; color: #333; font-size: 13px;">${contract.avance || 0} MAD</td>
+            </tr>
+            <tr style="background: #f9f9f9;">
+              <td style="padding: 10px 16px; border: 1px solid #eee; color: #666; font-size: 13px;">Reste à payer</td>
+              <td style="padding: 10px 16px; border: 1px solid #eee; color: #e24b4a; font-weight: bold; font-size: 14px;">${contract.reste || '—'} MAD</td>
+            </tr>
+          </table>
+          <table style="width:100%; border-collapse: collapse; margin-bottom: 24px;">
+            <tr style="background: #0a0a0a;">
+              <td colspan="2" style="padding: 12px 16px; color: #fff; font-weight: bold; font-size: 14px; letter-spacing: 1px;">👤 INFORMATIONS LOCATAIRE</td>
+            </tr>
+            ${[
+              ['Nom & Prénom', contract.client_name || '—', '#fff'],
+              ['Téléphone', contract.client_phone || '—', '#f9f9f9'],
+              ['CIN / Passeport', contract.client_cin || '—', '#fff'],
+              ['Permis', contract.client_permis || '—', '#f9f9f9'],
+            ].map(([label, value, bg]) => `
+              <tr style="background: ${bg};">
+                <td style="padding: 10px 16px; border: 1px solid #eee; color: #666; font-size: 13px; width: 40%;">${label}</td>
+                <td style="padding: 10px 16px; border: 1px solid #eee; color: #333; font-size: 13px;">${value}</td>
+              </tr>`).join('')}
+          </table>
+          <div style="background: #fff; border: 1px solid #eee; border-radius: 6px; padding: 16px; margin-bottom: 24px;">
+            <p style="color: #666; font-size: 12px; margin: 0 0 8px;">Pour toute question, contactez-nous :</p>
+            <p style="margin: 4px 0; font-size: 13px; color: #333;">📞 <strong>+212 701 050 809</strong></p>
+            <p style="margin: 4px 0; font-size: 13px; color: #333;">📧 <strong>Domingocarsrent@gmail.com</strong></p>
+            <p style="margin: 4px 0; font-size: 13px; color: #333;">📸 <strong>@Domingocarsrent</strong></p>
+          </div>
+          <p style="color: #999; font-size: 11px; text-align: center;">
+            Ce document est généré automatiquement par le système Domingo Cars Luxury Rent.
+          </p>
+        </div>
+        <div style="background: #0a0a0a; padding: 16px; text-align: center;">
+          <p style="color: #555; font-size: 11px; margin: 0;">© ${new Date().getFullYear()} Domingo Cars Luxury Rent — Casablanca, Maroc</p>
+        </div>
+      </div>
+    `;
+
+    const results = [];
+    for (const email of emails) {
+      if (!email || !email.includes('@')) continue;
+      const result = await resend.emails.send({
+        from: 'Domingo Cars <notifications@domingocars.ma>',
+        to: email.trim(),
+        subject: `Votre contrat de location ${contract.contract_number || ''} — Domingo Cars`,
+        html,
+      });
+      results.push({ email, id: result.id });
+    }
+
+    res.json({ success: true, sent: results.length, results });
+  } catch (err) {
+    console.error('Send email error:', err);
     res.status(500).json({ error: err.message });
   }
 });
