@@ -129,6 +129,7 @@ app.post('/api/auth', (req, res) => {
 app.use('/api/cars', require('./routes/cars'));
 app.use('/api/announcements', require('./routes/announcements'));
 app.use('/api/reservations', authMiddleware, require('./routes/reservations'));
+app.use('/api/clients', require('./routes/clients'));
 
 // Dashboard route
 app.use('/api/dashboard', authMiddleware, require('./routes/dashboard'));
