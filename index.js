@@ -42,9 +42,9 @@ async function checkEndingReservations() {
     if (result.rows.length > 0) {
       for (const reservation of result.rows) {
         await resend.emails.send({
-          from: 'Domingo Cars <onboarding@resend.dev>',
+          from: 'Domingo Cars <notifications@domingocars.ma>',
           to: process.env.ADMIN_EMAIL || 'Domingocarsrent@gmail.com',
-          subject: `⚠️ Retour véhicule demain — ${reservation.car_name}`,
+          subject: `⚠️ Retour véhicule demain — ${reservation.car_name} (${reservation.client_name})`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <div style="background: #FF6B00; padding: 20px; text-align: center;">
