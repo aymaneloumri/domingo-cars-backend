@@ -50,12 +50,16 @@ router.get('/contracts/:id', async (req, res) => {
   }
 });
 
+const safeInt   = (v) => { const n = parseInt(v);   return isNaN(n) ? null : n; };
+const safeFloat = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+const safeStr   = (v) => (v === '' || v === undefined || v === null) ? null : v;
+
 // POST create contract (auto-generate contract_number)
 router.post('/contracts', async (req, res) => {
   try {
-    const data = req.body;
+    const d = req.body;
 
-    let contractNumber = data.contract_number;
+    let contractNumber = d.contract_number && d.contract_number !== 'Auto-généré' ? d.contract_number : null;
     if (!contractNumber) {
       const last = await pool.query('SELECT contract_number FROM contracts ORDER BY id DESC LIMIT 1');
       let next = 1;
@@ -80,19 +84,22 @@ router.post('/contracts', async (req, res) => {
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
         $16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,
         $29,$30,$31,$32,$33,$34,$35,$36
-      ) RETURNING id
+      ) RETURNING id, contract_number
     `, [
-      contractNumber, data.contract_date, data.car_id || null, data.matricule, data.category,
-      data.brand, data.model, data.client_name, data.client_dob, data.client_phone,
-      data.client_cin, data.client_cin_expiry, data.client_address,
-      data.client_permis, data.client_permis_expiry,
-      data.driver2_name || null, data.driver2_dob || null, data.driver2_phone || null,
-      data.driver2_cin || null, data.driver2_cin_expiry || null,
-      data.driver2_address || null, data.driver2_permis || null, data.driver2_permis_expiry || null,
-      data.nb_days, data.price_per_day, data.total, data.avance, data.reste,
-      data.depart_datetime, data.depart_km, data.depart_inspection || 'Aucun point signalé',
-      data.depart_fuel || '1/8', data.retour_prevu, data.retour_effectif || null,
-      data.retour_km || null, data.retour_fuel || null,
+      contractNumber,        safeStr(d.contract_date), safeInt(d.car_id),
+      safeStr(d.matricule),  safeStr(d.category),      safeStr(d.brand),        safeStr(d.model),
+      safeStr(d.client_name),      safeStr(d.client_dob),         safeStr(d.client_phone),
+      safeStr(d.client_cin),       safeStr(d.client_cin_expiry),  safeStr(d.client_address),
+      safeStr(d.client_permis),    safeStr(d.client_permis_expiry),
+      safeStr(d.driver2_name),     safeStr(d.driver2_dob),        safeStr(d.driver2_phone),
+      safeStr(d.driver2_cin),      safeStr(d.driver2_cin_expiry), safeStr(d.driver2_address),
+      safeStr(d.driver2_permis),   safeStr(d.driver2_permis_expiry),
+      safeInt(d.nb_days),    safeFloat(d.price_per_day), safeFloat(d.total),
+      safeFloat(d.avance),   safeFloat(d.reste),
+      safeStr(d.depart_datetime),  safeInt(d.depart_km),
+      safeStr(d.depart_inspection) || 'Aucun point signalé', safeStr(d.depart_fuel) || '1/8',
+      safeStr(d.retour_prevu),     safeStr(d.retour_effectif),
+      safeInt(d.retour_km),        safeStr(d.retour_fuel),
     ]);
 
     const contract = await pool.query(`
@@ -100,7 +107,7 @@ router.post('/contracts', async (req, res) => {
       LEFT JOIN cars ca ON c.car_id = ca.id
       WHERE c.id = $1
     `, [result.rows[0].id]);
-    res.status(201).json(contract.rows[0]);
+    res.status(201).json({ ...contract.rows[0], contract_number: result.rows[0].contract_number });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -110,7 +117,7 @@ router.post('/contracts', async (req, res) => {
 router.put('/contracts/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const data = req.body;
+    const d = req.body;
 
     await pool.query(`
       UPDATE contracts SET
@@ -124,17 +131,20 @@ router.put('/contracts/:id', async (req, res) => {
         retour_prevu=$33, retour_effectif=$34, retour_km=$35, retour_fuel=$36
       WHERE id=$37
     `, [
-      data.contract_number, data.contract_date, data.car_id || null, data.matricule, data.category,
-      data.brand, data.model, data.client_name, data.client_dob, data.client_phone,
-      data.client_cin, data.client_cin_expiry, data.client_address,
-      data.client_permis, data.client_permis_expiry,
-      data.driver2_name || null, data.driver2_dob || null, data.driver2_phone || null,
-      data.driver2_cin || null, data.driver2_cin_expiry || null,
-      data.driver2_address || null, data.driver2_permis || null, data.driver2_permis_expiry || null,
-      data.nb_days, data.price_per_day, data.total, data.avance, data.reste,
-      data.depart_datetime, data.depart_km, data.depart_inspection,
-      data.depart_fuel, data.retour_prevu, data.retour_effectif || null,
-      data.retour_km || null, data.retour_fuel || null,
+      safeStr(d.contract_number), safeStr(d.contract_date), safeInt(d.car_id),
+      safeStr(d.matricule),  safeStr(d.category),      safeStr(d.brand),        safeStr(d.model),
+      safeStr(d.client_name),      safeStr(d.client_dob),         safeStr(d.client_phone),
+      safeStr(d.client_cin),       safeStr(d.client_cin_expiry),  safeStr(d.client_address),
+      safeStr(d.client_permis),    safeStr(d.client_permis_expiry),
+      safeStr(d.driver2_name),     safeStr(d.driver2_dob),        safeStr(d.driver2_phone),
+      safeStr(d.driver2_cin),      safeStr(d.driver2_cin_expiry), safeStr(d.driver2_address),
+      safeStr(d.driver2_permis),   safeStr(d.driver2_permis_expiry),
+      safeInt(d.nb_days),    safeFloat(d.price_per_day), safeFloat(d.total),
+      safeFloat(d.avance),   safeFloat(d.reste),
+      safeStr(d.depart_datetime),  safeInt(d.depart_km),
+      safeStr(d.depart_inspection), safeStr(d.depart_fuel),
+      safeStr(d.retour_prevu),     safeStr(d.retour_effectif),
+      safeInt(d.retour_km),        safeStr(d.retour_fuel),
       id,
     ]);
 
