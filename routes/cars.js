@@ -59,13 +59,13 @@ router.post('/admin/upload', auth, upload.single('image'), async (req, res) => {
 
 router.post('/admin', auth, async (req, res) => {
   try {
-    const { name, category, price_per_day, image_url, description, matricule, status } = req.body;
+    const { name, category, price_per_day, image_url, description, matricule, status, carburant, boite_vitesse } = req.body;
     const orderRes = await pool.query('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM cars');
     const maxOrder = orderRes.rows[0].next;
     const result = await pool.query(
-      `INSERT INTO cars (name, category, price_per_day, image_url, description, matricule, status, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-      [name, category, price_per_day, image_url || '', description || '', matricule || '', status || 'active', maxOrder]
+      `INSERT INTO cars (name, category, price_per_day, image_url, description, matricule, status, sort_order, carburant, boite_vitesse)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+      [name, category, price_per_day, image_url || '', description || '', matricule || '', status || 'active', maxOrder, carburant || 'essence', boite_vitesse || 'manuelle']
     );
     const car = await pool.query('SELECT * FROM cars WHERE id = $1', [result.rows[0].id]);
     res.status(201).json(car.rows[0]);
@@ -77,11 +77,11 @@ router.post('/admin', auth, async (req, res) => {
 router.put('/admin/:id', auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, price_per_day, image_url, description, matricule, status } = req.body;
+    const { name, category, price_per_day, image_url, description, matricule, status, carburant, boite_vitesse } = req.body;
     await pool.query(
-      `UPDATE cars SET name=$1, category=$2, price_per_day=$3, image_url=$4, description=$5, matricule=$6, status=$7
-       WHERE id=$8`,
-      [name, category, price_per_day, image_url || '', description || '', matricule || '', status, id]
+      `UPDATE cars SET name=$1, category=$2, price_per_day=$3, image_url=$4, description=$5, matricule=$6, status=$7, carburant=$8, boite_vitesse=$9
+       WHERE id=$10`,
+      [name, category, price_per_day, image_url || '', description || '', matricule || '', status, carburant || 'essence', boite_vitesse || 'manuelle', id]
     );
     const car = await pool.query('SELECT * FROM cars WHERE id = $1', [id]);
     res.json(car.rows[0]);
