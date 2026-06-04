@@ -4,9 +4,13 @@ const cors = require('cors');
 const path = require('path');
 const { Resend } = require('resend');
 const nodemailer = require('nodemailer');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 
 const app = express();
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+app.use(helmet());
 
 app.use(cors({
   origin: '*',
@@ -16,9 +20,24 @@ app.use(cors({
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: 'Trop de requêtes, réessayez dans 15 minutes' },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Trop de tentatives, réessayez dans 15 minutes' },
+});
+
+app.use('/api/', limiter);
+app.use('/api/auth', authLimiter);
+
 const authMiddleware = (req, res, next) => {
   const token = req.headers['x-admin-token'];
-  if (!token || token !== process.env.ADMIN_PASSWORD) {
+  if (!token || token.length < 8 || token !== process.env.ADMIN_PASSWORD) {
     return res.status(401).json({ error: 'Non autorisé' });
   }
   next();
