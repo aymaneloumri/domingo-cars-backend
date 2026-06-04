@@ -3,7 +3,6 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const { Resend } = require('resend');
-const nodemailer = require('nodemailer');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 
@@ -161,14 +160,6 @@ app.use('/api/admin', authMiddleware, require('./routes/contracts'));
 app.use('/api', authMiddleware, require('./routes/contracts'));
 
 // ── Alerts deadline cron ──────────────────────────────────────────────────────
-const alertTransporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-});
-
 async function checkAlerts() {
   try {
     const pool = require('./db');
@@ -239,8 +230,8 @@ async function checkAlerts() {
           </div>
         `;
 
-        await alertTransporter.sendMail({
-          from: `"Domingo Cars Luxury Rent" <${process.env.GMAIL_USER}>`,
+        await resend.emails.send({
+          from: 'Domingo Cars <notifications@domingocars.ma>',
           to: process.env.ADMIN_EMAIL || 'Domingocarsrent@gmail.com',
           subject,
           html,
