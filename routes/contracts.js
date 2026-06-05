@@ -41,10 +41,11 @@ router.get('/contracts/next-number', async (req, res) => {
 router.get('/contracts', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT c.*, ca.name as car_name
-      FROM contracts c
-      LEFT JOIN cars ca ON c.car_id = ca.id
-      ORDER BY c.id DESC
+      SELECT ct.*, c.name as car_name
+      FROM contracts ct
+      LEFT JOIN cars c ON ct.car_id = c.id
+      ORDER BY ct.id DESC
+      LIMIT 50
     `);
     res.json(result.rows);
   } catch (err) {
@@ -180,6 +181,10 @@ router.put('/contracts/:id', async (req, res) => {
 // DELETE contract
 router.delete('/contracts/:id', async (req, res) => {
   try {
+    const token = req.headers['x-admin-token'];
+    if (token !== (process.env.ADMIN_PASSWORD || 'domingo2024')) {
+      return res.status(401).json({ error: 'Non autorisé' });
+    }
     await pool.query('DELETE FROM contracts WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err) {
