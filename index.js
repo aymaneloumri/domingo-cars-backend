@@ -153,6 +153,9 @@ app.use('/api/announcements', require('./routes/announcements'));
 app.use('/api/reservations', authMiddleware, require('./routes/reservations'));
 app.use('/api/clients', require('./routes/clients'));
 
+// Settings route
+app.use('/api/settings', require('./routes/settings'));
+
 // Dashboard route
 app.use('/api/dashboard', authMiddleware, require('./routes/dashboard'));
 // Contracts routes — mounted at both /api/admin (legacy) and /api (used by frontend)
