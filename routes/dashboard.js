@@ -105,14 +105,14 @@ router.get('/gestion-stats', async (req, res) => {
         [monthStart, monthEnd]
       ),
       pool.query(
-        `SELECT c.name as car_name,
+        `SELECT c.name as car_name, c.matricule,
                 COALESCE(SUM(r.prix_total), 0) as total,
                 COUNT(r.id) as count
          FROM cars c
          LEFT JOIN reservations r ON r.car_id = c.id
            AND r.status = 'confirmed'
            AND r.start_date >= $1 AND r.start_date <= $2
-         GROUP BY c.id, c.name ORDER BY total DESC`,
+         GROUP BY c.id, c.name, c.matricule ORDER BY total DESC`,
         [monthStart, monthEnd]
       ),
       pool.query(
@@ -146,13 +146,13 @@ router.get('/gestion-stats', async (req, res) => {
          AND caution_rendue = false`
       ),
       pool.query(
-        `SELECT c.name as car_name,
+        `SELECT c.name as car_name, c.matricule,
                 COUNT(r.id) as nb_locations,
                 COALESCE(SUM(r.nb_jours), 0) as jours_loues
          FROM cars c
          LEFT JOIN reservations r ON r.car_id = c.id
            AND r.status = 'confirmed' AND r.start_date >= $1
-         GROUP BY c.id, c.name ORDER BY jours_loues DESC`,
+         GROUP BY c.id, c.name, c.matricule ORDER BY jours_loues DESC`,
         [monthStart]
       ),
       pool.query(
