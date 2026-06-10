@@ -63,4 +63,145 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/dashboard/gestion-stats
+router.get('/gestion-stats', async (req, res) => {
+  try {
+    const token = req.headers['x-admin-token'];
+    const password = process.env.ADMIN_PASSWORD || 'domingo2024';
+    if (token !== password) return res.status(401).json({ error: 'Non autorisé' });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const monthStart = today.slice(0, 7) + '-01';
+    const monthEnd = today.slice(0, 7) + '-31';
+    const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    const [
+      resaMois, resaAujourdhui, resaSemaine,
+      revenuMois, revenuParVoiture,
+      revenu6Mois,
+      clientsTotal, clientsMois, clientsFrequents,
+      cautionsAttente, cautionsMontant,
+      tauxOccupation, sansFin, voituresIndispo,
+    ] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*) FROM reservations WHERE start_date >= $1 AND start_date <= $2`,
+        [monthStart, monthEnd]
+      ),
+      pool.query(
+        `SELECT COUNT(*) FROM reservations
+         WHERE status IN ('confirmed','pending')
+         AND start_date <= $1 AND (end_date >= $1 OR end_date IS NULL)`,
+        [today]
+      ),
+      pool.query(
+        `SELECT COUNT(*) FROM reservations
+         WHERE status IN ('confirmed','pending')
+         AND start_date > $1 AND start_date <= $2`,
+        [today, weekEnd]
+      ),
+      pool.query(
+        `SELECT COALESCE(SUM(prix_total), 0) as total FROM reservations
+         WHERE status = 'confirmed' AND start_date >= $1 AND start_date <= $2`,
+        [monthStart, monthEnd]
+      ),
+      pool.query(
+        `SELECT c.name as car_name,
+                COALESCE(SUM(r.prix_total), 0) as total,
+                COUNT(r.id) as count
+         FROM cars c
+         LEFT JOIN reservations r ON r.car_id = c.id
+           AND r.status = 'confirmed'
+           AND r.start_date >= $1 AND r.start_date <= $2
+         GROUP BY c.id, c.name ORDER BY total DESC`,
+        [monthStart, monthEnd]
+      ),
+      pool.query(
+        `SELECT TO_CHAR(DATE_TRUNC('month', start_date::date), 'YYYY-MM') as mois,
+                COALESCE(SUM(prix_total), 0) as total
+         FROM reservations
+         WHERE status = 'confirmed'
+           AND start_date >= (CURRENT_DATE - INTERVAL '6 months')::text
+         GROUP BY DATE_TRUNC('month', start_date::date)
+         ORDER BY mois ASC`
+      ),
+      pool.query('SELECT COUNT(*) FROM clients'),
+      pool.query(`SELECT COUNT(*) FROM clients WHERE created_at >= $1`, [monthStart]),
+      pool.query(
+        `SELECT cl.nom_prenom, COUNT(r.id) as nb_reservations,
+                COALESCE(SUM(r.prix_total), 0) as total_depense
+         FROM clients cl
+         LEFT JOIN reservations r ON r.client_id = cl.id
+         GROUP BY cl.id, cl.nom_prenom
+         HAVING COUNT(r.id) > 0
+         ORDER BY nb_reservations DESC LIMIT 5`
+      ),
+      pool.query(
+        `SELECT COUNT(*) FROM reservations
+         WHERE caution_type != 'aucune' AND caution_type IS NOT NULL
+         AND caution_rendue = false AND status IN ('confirmed','pending')`
+      ),
+      pool.query(
+        `SELECT COALESCE(SUM(caution_montant), 0) as total FROM reservations
+         WHERE caution_type != 'aucune' AND caution_type IS NOT NULL
+         AND caution_rendue = false`
+      ),
+      pool.query(
+        `SELECT c.name as car_name,
+                COUNT(r.id) as nb_locations,
+                COALESCE(SUM(r.nb_jours), 0) as jours_loues
+         FROM cars c
+         LEFT JOIN reservations r ON r.car_id = c.id
+           AND r.status = 'confirmed' AND r.start_date >= $1
+         GROUP BY c.id, c.name ORDER BY jours_loues DESC`,
+        [monthStart]
+      ),
+      pool.query(
+        `SELECT COUNT(*) FROM reservations
+         WHERE (end_date IS NULL OR end_date = '')
+         AND status IN ('confirmed','pending')`
+      ),
+      pool.query(
+        `SELECT COUNT(DISTINCT car_id) FROM reservations
+         WHERE status IN ('confirmed','pending')
+         AND start_date <= $1 AND (end_date >= $1 OR end_date IS NULL)`,
+        [today]
+      ),
+    ]);
+
+    const totalCarsRes = await pool.query('SELECT COUNT(*) FROM cars');
+
+    res.json({
+      reservations: {
+        ce_mois:        parseInt(resaMois.rows[0].count),
+        aujourd_hui:    parseInt(resaAujourdhui.rows[0].count),
+        cette_semaine:  parseInt(resaSemaine.rows[0].count),
+        sans_fin:       parseInt(sansFin.rows[0].count),
+      },
+      revenus: {
+        ce_mois:         parseFloat(revenuMois.rows[0].total),
+        par_voiture:     revenuParVoiture.rows,
+        meilleure_voiture: revenuParVoiture.rows[0] || null,
+        six_mois:        revenu6Mois.rows,
+      },
+      clients: {
+        total:              parseInt(clientsTotal.rows[0].count),
+        nouveaux_ce_mois:   parseInt(clientsMois.rows[0].count),
+        frequents:          clientsFrequents.rows,
+      },
+      cautions: {
+        en_attente:    parseInt(cautionsAttente.rows[0].count),
+        montant_total: parseFloat(cautionsMontant.rows[0].total),
+      },
+      flotte: {
+        taux_occupation:              tauxOccupation.rows,
+        indisponibles_aujourd_hui:    parseInt(voituresIndispo.rows[0].count),
+        total:                        parseInt(totalCarsRes.rows[0].count),
+      },
+    });
+  } catch (err) {
+    console.error('Stats error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
