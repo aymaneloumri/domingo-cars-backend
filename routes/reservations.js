@@ -137,7 +137,8 @@ router.post('/', async (req, res) => {
   try {
     const { car_id, client_name, client_phone, client_id,
             start_date, end_date, start_datetime, end_datetime,
-            status, prix_par_jour, nb_jours, prix_total } = req.body;
+            status, prix_par_jour, nb_jours, prix_total,
+            avance = 0, reste = 0 } = req.body;
 
     const conflict = await pool.query(
       `SELECT COUNT(*) as count FROM reservations
@@ -163,15 +164,17 @@ router.post('/', async (req, res) => {
          status, prix_par_jour, nb_jours, prix_total,
          caution_type, caution_montant, caution_avance, caution_reste,
          caution_rendue, caution_note, caution_cheque_numero,
-         caution_document_description, caution_document_recu)
+         caution_document_description, caution_document_recu,
+         avance, reste)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-               $13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING id`,
+               $13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING id`,
       [car_id, client_name, client_phone, client_id || null,
        start_date, end_date, start_datetime || null, end_datetime || null,
        status || 'pending', prix_par_jour || 0, nb_jours || 0, prix_total || 0,
        caution_type, caution_montant || 0, caution_avance || 0, caution_reste || 0,
        caution_rendue || false, caution_note || null, caution_cheque_numero || null,
-       caution_document_description || null, caution_document_recu || false]
+       caution_document_description || null, caution_document_recu || false,
+       avance || 0, reste || 0]
     );
 
     const reservation = await pool.query(
@@ -193,6 +196,7 @@ router.put('/:id', async (req, res) => {
     const { car_id, client_name, client_phone, client_id,
             start_date, end_date, start_datetime, end_datetime,
             status, prix_par_jour, nb_jours, prix_total,
+            avance = 0, reste = 0,
             caution_type = 'aucune', caution_montant = 0, caution_avance = 0,
             caution_reste = 0, caution_rendue = false, caution_note = null,
             caution_cheque_numero = null, caution_document_description = null,
@@ -220,15 +224,15 @@ router.put('/:id', async (req, res) => {
            caution_type=$13, caution_montant=$14, caution_avance=$15,
            caution_reste=$16, caution_rendue=$17, caution_note=$18,
            caution_cheque_numero=$19, caution_document_description=$20,
-           caution_document_recu=$21
-       WHERE id=$22`,
+           caution_document_recu=$21, avance=$22, reste=$23
+       WHERE id=$24`,
       [car_id, client_name, client_phone, client_id || null,
        start_date, end_date, start_datetime || null, end_datetime || null,
        status, prix_par_jour || 0, nb_jours || 0, prix_total || 0,
        caution_type, caution_montant || 0, caution_avance || 0,
        caution_reste || 0, caution_rendue || false, caution_note || null,
        caution_cheque_numero || null, caution_document_description || null,
-       caution_document_recu || false, id]
+       caution_document_recu || false, avance || 0, reste || 0, id]
     );
 
     const reservation = await pool.query(
