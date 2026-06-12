@@ -5,6 +5,59 @@ const pool = require('../db')
 const auth = (req) =>
   req.headers['x-admin-token'] === (process.env.ADMIN_PASSWORD || 'domingo2024')
 
+// Ensure blacklist columns exist (runs once at startup)
+;(async () => {
+  try {
+    await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS blacklisted BOOLEAN DEFAULT FALSE`)
+    await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS blacklist_reason TEXT`)
+    await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS blacklisted_at TIMESTAMPTZ`)
+  } catch (err) {
+    console.error('Blacklist migration error:', err.message)
+  }
+})()
+
+// GET /blacklisted/list — MUST come before GET /:id
+router.get('/blacklisted/list', async (req, res) => {
+  try {
+    if (!auth(req)) return res.status(401).json({ error: 'Non autorisé' })
+    const result = await pool.query(
+      `SELECT * FROM clients WHERE blacklisted = TRUE ORDER BY blacklisted_at DESC`
+    )
+    res.json(result.rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PUT /:id/blacklist — MUST come before PUT /:id
+router.put('/:id/blacklist', async (req, res) => {
+  try {
+    if (!auth(req)) return res.status(401).json({ error: 'Non autorisé' })
+    const { reason } = req.body
+    await pool.query(
+      `UPDATE clients SET blacklisted=TRUE, blacklist_reason=$1, blacklisted_at=NOW() WHERE id=$2`,
+      [reason || null, req.params.id]
+    )
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PUT /:id/unblacklist — MUST come before PUT /:id
+router.put('/:id/unblacklist', async (req, res) => {
+  try {
+    if (!auth(req)) return res.status(401).json({ error: 'Non autorisé' })
+    await pool.query(
+      `UPDATE clients SET blacklisted=FALSE, blacklist_reason=NULL, blacklisted_at=NULL WHERE id=$1`,
+      [req.params.id]
+    )
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 router.get('/', async (req, res) => {
   try {
     if (!auth(req)) return res.status(401).json({ error: 'Non autorisé' })
