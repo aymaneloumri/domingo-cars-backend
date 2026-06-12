@@ -151,26 +151,6 @@ app.use('/api/alerts', require('./routes/alerts'));
 app.use('/api/cars', require('./routes/cars'));
 app.use('/api/announcements', require('./routes/announcements'));
 
-// Temp debug route — no auth (remove after debugging)
-app.get('/api/reservations/debug-reservations', async (req, res) => {
-  try {
-    const pool = require('./db');
-    const car = req.query.car || 'Clio';
-    const result = await pool.query(
-      `SELECT r.id, r.car_id, c.name as car_name,
-              r.start_date, r.end_date, r.status, r.nb_jours
-       FROM reservations r
-       JOIN cars c ON r.car_id = c.id
-       WHERE c.name ILIKE $1
-       ORDER BY r.start_date`,
-      [`%${car}%`]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.use('/api/reservations', authMiddleware, require('./routes/reservations'));
 app.use('/api/clients', require('./routes/clients'));
 
