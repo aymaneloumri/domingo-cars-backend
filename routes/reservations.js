@@ -38,6 +38,18 @@ router.get('/monthly-report', async (req, res) => {
       [monthStart, monthEnd]
     );
 
+    // Calculate days that fall within the requested month for a reservation
+    const calcDaysInMonth = (startDate, endDate, mStart, mEnd) => {
+      const resStart = new Date(startDate + 'T00:00:00');
+      const resEnd = endDate ? new Date(endDate + 'T00:00:00') : new Date(mEnd + 'T00:00:00');
+      const msStart = new Date(mStart + 'T00:00:00');
+      const msEnd = new Date(mEnd + 'T00:00:00');
+      const overlapStart = resStart > msStart ? resStart : msStart;
+      const overlapEnd = resEnd < msEnd ? resEnd : msEnd;
+      if (overlapStart > overlapEnd) return 0;
+      return Math.max(0, Math.floor((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1);
+    };
+
     const byCarMap = {};
     for (const r of result.rows) {
       if (!byCarMap[r.car_id]) {
@@ -49,9 +61,12 @@ router.get('/monthly-report', async (req, res) => {
           reservations: [],
         };
       }
+      const daysThisMonth = calcDaysInMonth(r.start_date, r.end_date, monthStart, monthEnd);
+      const nbJoursTotal = r.nb_jours || daysThisMonth || 1;
+      const proportionalRevenue = (daysThisMonth / nbJoursTotal) * parseFloat(r.prix_total || 0);
       byCarMap[r.car_id].reservations_count++;
-      byCarMap[r.car_id].total_jours += (r.nb_jours || 0);
-      byCarMap[r.car_id].total_revenue += parseFloat(r.prix_total || 0);
+      byCarMap[r.car_id].total_jours += daysThisMonth;
+      byCarMap[r.car_id].total_revenue += proportionalRevenue;
       byCarMap[r.car_id].reservations.push(r);
     }
 
