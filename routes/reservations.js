@@ -17,6 +17,26 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /debug-reservations?car=Clio — returns raw rows for a car name (no auth, temp debug)
+router.get('/debug-reservations', async (req, res) => {
+  try {
+    const carName = req.query.car || 'Clio';
+    const result = await pool.query(
+      `SELECT r.id, r.car_id, c.name as car_name,
+              r.start_date, r.end_date, r.status,
+              r.nb_jours, r.prix_par_jour, r.prix_total
+       FROM reservations r
+       JOIN cars c ON r.car_id = c.id
+       WHERE c.name ILIKE $1
+       ORDER BY r.start_date`,
+      [`%${carName}%`]
+    );
+    res.json({ count: result.rows.length, rows: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /monthly-report?month=YYYY-MM — must be before /:id wildcard
 router.get('/monthly-report', async (req, res) => {
   try {
@@ -37,6 +57,8 @@ router.get('/monthly-report', async (req, res) => {
        ORDER BY c.name, r.start_date`,
       [monthStart, monthEnd]
     );
+
+    console.log(`[monthly-report] month=${month} monthStart=${monthStart} monthEnd=${monthEnd} rows=${result.rows.length}`);
 
     // Calculate days that fall within the requested month for a reservation
     const calcDaysInMonth = (startDate, endDate, mStart, mEnd) => {
@@ -64,6 +86,7 @@ router.get('/monthly-report', async (req, res) => {
       const daysThisMonth = calcDaysInMonth(r.start_date, r.end_date, monthStart, monthEnd);
       const nbJoursTotal = r.nb_jours || daysThisMonth || 1;
       const proportionalRevenue = (daysThisMonth / nbJoursTotal) * parseFloat(r.prix_total || 0);
+      console.log(`[monthly-report]  id=${r.id} car="${r.car_name}" start=${r.start_date} end=${r.end_date} nb_jours=${r.nb_jours} daysThisMonth=${daysThisMonth} runningTotal=${byCarMap[r.car_id].total_jours + daysThisMonth}`);
       byCarMap[r.car_id].reservations_count++;
       byCarMap[r.car_id].total_jours += daysThisMonth;
       byCarMap[r.car_id].total_revenue += proportionalRevenue;
@@ -74,6 +97,8 @@ router.get('/monthly-report', async (req, res) => {
     const total_revenue = cars.reduce((sum, c) => sum + c.total_revenue, 0);
     const total_reservations = cars.reduce((sum, c) => sum + c.reservations_count, 0);
     const total_jours = cars.reduce((sum, c) => sum + c.total_jours, 0);
+
+    console.log(`[monthly-report] RESULT:`, cars.map(c => `${c.car_name}: ${c.total_jours}j`).join(' | '));
 
     res.json({ month, cars, total_revenue, total_reservations, total_jours });
   } catch (err) {
